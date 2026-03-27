@@ -19,12 +19,12 @@ func (s *Ethereum) GetSupervisorFailsafe() bool {
 	return s.supervisorFailsafe.Load()
 }
 
-func (s *Ethereum) CheckAccessList(ctx context.Context, inboxEntries []common.Hash, minSafety interoptypes.SafetyLevel, execDesc interoptypes.ExecutingDescriptor) error {
+func (s *Ethereum) CheckAccessList(ctx context.Context, inboxEntries []common.Hash, minSafety interoptypes.SafetyLevel, execDesc interoptypes.ExecutingDescriptor, sender common.Address) error {
 	if s.interopRPC == nil {
 		return errors.New("cannot check interop access list, no RPC available")
 	}
 
-	err := s.interopRPC.CheckAccessList(ctx, inboxEntries, minSafety, execDesc)
+	err := s.interopRPC.CheckAccessList(ctx, inboxEntries, minSafety, execDesc, sender)
 
 	// Detect failsafe mode and cache it in the backend
 	switch err {

@@ -3,6 +3,7 @@ package txpool
 import (
 	"context"
 	"errors"
+	"math/big"
 	"net"
 	"testing"
 	"time"
@@ -13,12 +14,13 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/types/interoptypes"
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 type mockInteropFilterAPI struct {
 	timeFn       func() (uint64, error)
 	accessListFn func(tx *types.Transaction) []common.Hash
-	checkFn      func(ctx context.Context, inboxEntries []common.Hash, minSafety interoptypes.SafetyLevel, ed interoptypes.ExecutingDescriptor) error
+	checkFn      func(ctx context.Context, inboxEntries []common.Hash, minSafety interoptypes.SafetyLevel, ed interoptypes.ExecutingDescriptor, sender common.Address) error
 }
 
 func (m *mockInteropFilterAPI) CurrentInteropBlockTime() (uint64, error) {
@@ -35,9 +37,9 @@ func (m *mockInteropFilterAPI) TxToInteropAccessList(tx *types.Transaction) []co
 	return nil
 }
 
-func (m *mockInteropFilterAPI) CheckAccessList(ctx context.Context, inboxEntries []common.Hash, minSafety interoptypes.SafetyLevel, ed interoptypes.ExecutingDescriptor) error {
+func (m *mockInteropFilterAPI) CheckAccessList(ctx context.Context, inboxEntries []common.Hash, minSafety interoptypes.SafetyLevel, ed interoptypes.ExecutingDescriptor, sender common.Address) error {
 	if m.checkFn != nil {
-		return m.checkFn(ctx, inboxEntries, minSafety, ed)
+		return m.checkFn(ctx, inboxEntries, minSafety, ed, sender)
 	}
 	return nil
 }
@@ -45,7 +47,16 @@ func (m *mockInteropFilterAPI) CheckAccessList(ctx context.Context, inboxEntries
 func TestInteropFilter(t *testing.T) {
 	api := &mockInteropFilterAPI{}
 	filter := NewInteropFilter(api, *uint256.NewInt(123))
-	tx := types.NewTx(&types.DynamicFeeTx{})
+	key, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	tx := types.MustSignNewTx(key, types.LatestSignerForChainID(big.NewInt(123)), &types.DynamicFeeTx{
+		ChainID:   big.NewInt(123),
+		Nonce:     0,
+		GasTipCap: big.NewInt(1),
+		GasFeeCap: big.NewInt(1),
+		Gas:       21000,
+	})
+	expectedSender := crypto.PubkeyToAddress(key.PublicKey)
 
 	t.Run("Tx has no access list", func(t *testing.T) {
 		api.accessListFn = func(tx *types.Transaction) []common.Hash {
@@ -66,8 +77,9 @@ func TestInteropFilter(t *testing.T) {
 		api.accessListFn = func(tx *types.Transaction) []common.Hash {
 			return []common.Hash{{0xaa}}
 		}
-		api.checkFn = func(ctx context.Context, inboxEntries []common.Hash, minSafety interoptypes.SafetyLevel, ed interoptypes.ExecutingDescriptor) error {
+		api.checkFn = func(ctx context.Context, inboxEntries []common.Hash, minSafety interoptypes.SafetyLevel, ed interoptypes.ExecutingDescriptor, sender common.Address) error {
 			require.Equal(t, common.Hash{0xaa}, inboxEntries[0])
+			require.Equal(t, expectedSender, sender)
 			return nil
 		}
 		require.True(t, filter.FilterTx(context.Background(), tx))
@@ -79,8 +91,9 @@ func TestInteropFilter(t *testing.T) {
 		api.accessListFn = func(tx *types.Transaction) []common.Hash {
 			return []common.Hash{{0xaa}}
 		}
-		api.checkFn = func(ctx context.Context, inboxEntries []common.Hash, minSafety interoptypes.SafetyLevel, ed interoptypes.ExecutingDescriptor) error {
+		api.checkFn = func(ctx context.Context, inboxEntries []common.Hash, minSafety interoptypes.SafetyLevel, ed interoptypes.ExecutingDescriptor, sender common.Address) error {
 			require.Equal(t, common.Hash{0xaa}, inboxEntries[0])
+			require.Equal(t, expectedSender, sender)
 			return errors.New("error")
 		}
 		require.False(t, filter.FilterTx(context.Background(), tx))
@@ -93,8 +106,9 @@ func TestInteropFilter(t *testing.T) {
 		api.accessListFn = func(tx *types.Transaction) []common.Hash {
 			return []common.Hash{{0xaa}}
 		}
-		api.checkFn = func(ctx context.Context, inboxEntries []common.Hash, minSafety interoptypes.SafetyLevel, ed interoptypes.ExecutingDescriptor) error {
+		api.checkFn = func(ctx context.Context, inboxEntries []common.Hash, minSafety interoptypes.SafetyLevel, ed interoptypes.ExecutingDescriptor, sender common.Address) error {
 			require.Equal(t, common.Hash{0xaa}, inboxEntries[0])
+			require.Equal(t, expectedSender, sender)
 			return nil
 		}
 		require.True(t, filter.FilterTx(context.Background(), tx))
@@ -107,8 +121,9 @@ func TestInteropFilter(t *testing.T) {
 		api.accessListFn = func(tx *types.Transaction) []common.Hash {
 			return []common.Hash{{0xaa}}
 		}
-		api.checkFn = func(ctx context.Context, inboxEntries []common.Hash, minSafety interoptypes.SafetyLevel, ed interoptypes.ExecutingDescriptor) error {
+		api.checkFn = func(ctx context.Context, inboxEntries []common.Hash, minSafety interoptypes.SafetyLevel, ed interoptypes.ExecutingDescriptor, sender common.Address) error {
 			require.Equal(t, common.Hash{0xaa}, inboxEntries[0])
+			require.Equal(t, expectedSender, sender)
 			return nil
 		}
 		require.False(t, filter.FilterTx(context.Background(), tx))
@@ -143,7 +158,7 @@ func TestInteropFilterRPCFailures(t *testing.T) {
 			api.accessListFn = func(tx *types.Transaction) []common.Hash {
 				return []common.Hash{{0xaa}}
 			}
-			api.checkFn = func(ctx context.Context, inboxEntries []common.Hash, minSafety interoptypes.SafetyLevel, ed interoptypes.ExecutingDescriptor) error {
+			api.checkFn = func(ctx context.Context, inboxEntries []common.Hash, minSafety interoptypes.SafetyLevel, ed interoptypes.ExecutingDescriptor, sender common.Address) error {
 				if tt.networkErr {
 					return &net.OpError{Op: "dial", Err: errors.New("connection refused")}
 				}
@@ -156,7 +171,16 @@ func TestInteropFilterRPCFailures(t *testing.T) {
 				return nil
 			}
 
-			result := filter.FilterTx(context.Background(), &types.Transaction{})
+			key, err := crypto.GenerateKey()
+			require.NoError(t, err)
+			tx := types.MustSignNewTx(key, types.LatestSignerForChainID(big.NewInt(123)), &types.DynamicFeeTx{
+				ChainID:   big.NewInt(123),
+				Nonce:     0,
+				GasTipCap: big.NewInt(1),
+				GasFeeCap: big.NewInt(1),
+				Gas:       21000,
+			})
+			result := filter.FilterTx(context.Background(), tx)
 			require.Equal(t, false, result, "FilterTx result mismatch")
 		})
 	}

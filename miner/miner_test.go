@@ -75,7 +75,8 @@ func (m *mockBackend) TxPool() *txpool.TxPool {
 func (m *mockBackend) GetSupervisorFailsafe() bool {
 	return m.supervisorInFailsafe
 }
-func (m *mockBackend) CheckAccessList(ctx context.Context, inboxEntries []common.Hash, minSafety interoptypes.SafetyLevel, executingDescriptor interoptypes.ExecutingDescriptor) error {
+func (m *mockBackend) CheckAccessList(ctx context.Context, inboxEntries []common.Hash, minSafety interoptypes.SafetyLevel, executingDescriptor interoptypes.ExecutingDescriptor, sender common.Address) error {
+	_ = sender
 	return nil
 }
 func (m *mockBackend) QueryFailsafe(ctx context.Context) (bool, error) {

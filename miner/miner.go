@@ -54,7 +54,7 @@ type BackendWithHistoricalState interface {
 }
 
 type BackendWithInterop interface {
-	CheckAccessList(ctx context.Context, inboxEntries []common.Hash, minSafety interoptypes.SafetyLevel, executingDescriptor interoptypes.ExecutingDescriptor) error
+	CheckAccessList(ctx context.Context, inboxEntries []common.Hash, minSafety interoptypes.SafetyLevel, executingDescriptor interoptypes.ExecutingDescriptor, sender common.Address) error
 
 	// GetFailsafeEnabled reads the local failsafe status from the backend
 	GetSupervisorFailsafe() bool

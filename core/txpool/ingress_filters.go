@@ -21,7 +21,7 @@ type IngressFilter interface {
 type interopFilterAPI interface {
 	CurrentInteropBlockTime() (uint64, error)
 	TxToInteropAccessList(tx *types.Transaction) []common.Hash
-	CheckAccessList(ctx context.Context, inboxEntries []common.Hash, minSafety interoptypes.SafetyLevel, execDesc interoptypes.ExecutingDescriptor) error
+	CheckAccessList(ctx context.Context, inboxEntries []common.Hash, minSafety interoptypes.SafetyLevel, execDesc interoptypes.ExecutingDescriptor, sender common.Address) error
 }
 
 type interopAccessFilter struct {
@@ -60,7 +60,11 @@ func (f *interopAccessFilter) FilterTx(ctx context.Context, tx *types.Transactio
 		return false
 	}
 	exDesc := interoptypes.ExecutingDescriptor{Timestamp: t, Timeout: f.timeout, ChainID: f.chainID}
+	sender, err := types.Sender(types.LatestSignerForChainID(tx.ChainId()), tx)
+	if err != nil {
+		return false
+	}
 
 	// perform the interop check and update internal failsafe bool if needed
-	return f.api.CheckAccessList(ctx, hashes, interoptypes.CrossUnsafe, exDesc) == nil
+	return f.api.CheckAccessList(ctx, hashes, interoptypes.CrossUnsafe, exDesc, sender) == nil
 }
